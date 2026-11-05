@@ -1,0 +1,107 @@
+---
+title: "project2"
+output: word_document
+author: Zihan SUN
+date: "2026-11-03"
+GitHub: https://github.com/zihansun22/Project2.git
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = FALSE, warning = FALSE, message = FALSE)
+library(dplyr)
+library(tidyr)
+library(ggplot2)
+library(lubridate)
+library(knitr)
+source("project2.R")  # the functions
+```
+
+
+```{r}
+# read in data and process
+files <- c("data/AQ_2018.csv", "data/AQ_2019.csv", "data/AQ_2020.csv")
+
+aq_list <- lapply(files, process_air)   # default: ppm
+aq_all  <- dplyr::bind_rows(aq_list, .id = "year_file") |>
+  dplyr::mutate(year = lubridate::year(date))
+
+# draw tables
+aq_all |> make_summary(2018) |> 
+  kable(caption = "min/max daily concentrations of various pollutants in 2018")
+aq_all |> make_summary(2019) |> 
+  kable(caption = "min/max daily concentrations of various pollutants in 2019")
+aq_all |> make_summary(2020) |> 
+  kable(caption = "min/max daily concentrations of various pollutants in 2020")
+
+```
+```{r}
+# Monthly average of CO and O3+95% CI
+
+library(ggplot2)
+library(dplyr)
+library(lubridate)
+
+# summary by month
+monthly <- aq_all |>
+  mutate(month = factor(month.abb[month(date)], levels = month.abb)) |>
+  group_by(month) |>
+  summarise(
+    co_mean = mean(co_ppm, na.rm = TRUE),
+    co_sd   = sd(co_ppm,   na.rm = TRUE),
+    co_n    = sum(!is.na(co_ppm)),
+    o3_mean = mean(o3_ppm, na.rm = TRUE),
+    o3_sd   = sd(o3_ppm,   na.rm = TRUE),
+    o3_n    = sum(!is.na(o3_ppm)),
+    .groups = "drop"
+  ) |>
+  mutate(
+    co_ci = 1.96 * co_sd / sqrt(co_n),
+    o3_ci = 1.96 * o3_sd / sqrt(o3_n)
+  )
+
+scale_factor <- max(monthly$co_mean, na.rm = TRUE) / max(monthly$o3_mean, na.rm = TRUE)
+
+ggplot(monthly, aes(x = month)) +
+  geom_point(aes(y = co_mean, color = "CO"), size = 3) +
+  geom_errorbar(aes(ymin = co_mean - co_ci, ymax = co_mean + co_ci, color = "CO"), width = 0.2) +
+  geom_point(aes(y = o3_mean * scale_factor, color = "O3"), size = 3) +
+  geom_errorbar(aes(ymin = (o3_mean - o3_ci) * scale_factor,
+                    ymax = (o3_mean + o3_ci) * scale_factor, color = "O3"), width = 0.2) +
+  scale_y_continuous(
+    name = "CO (ppm)",
+    sec.axis = sec_axis(~ . / scale_factor, name = "O3 (ppm)")
+  ) +
+  scale_color_manual(values = c("CO" = "#D55E00", "O3" = "#0072B2")) +
+  labs(x = "Month", title = "Monthly mean CO and O3 with 95% CI (2018–2020)",
+       color = "Pollutant") +
+  theme_minimal()
+```
+Because CO and O₃ are measured on different scales, a dual y-axis approach is used to ensure the seasonal patterns of both pollutants remain clearly readable without one being flattened.
+
+
+
+```{r}
+# PM2.5 Monthly x Year
+
+pm_month <- aq_all |>
+  mutate(month = factor(month.abb[month(date)], levels = month.abb),
+         year  = factor(year)) |>
+  group_by(year, month) |>
+  summarise(pm_mean = mean(pm25_ugm3, na.rm = TRUE), .groups = "drop")
+
+ggplot(pm_month, aes(x = month, y = pm_mean, color = year, group = year)) +
+  geom_line(linewidth = 0.8) +
+  geom_point(size = 2.5) +
+  scale_color_brewer(palette = "Dark2") +
+  labs(x = "Month", y = "PM2.5 (µg/m³)",
+       title = "Monthly mean PM2.5 by year (2018–2020)", color = "Year") +
+  theme_minimal()
+```
+I chose a combination of line and point geoms because it effectively highlights both the seasonal fluctuations within each year and the overall trend across years.
+
+## Interpretation
+PM2.5 and CO show clear seasonal patterns, with higher concentrations typically occurring in winter months and lower in spring and autumn. The year 2020 seems to have slightly lower PM2.5 levels in spring, though data only extends to April. Note that months from May to December are based on 2 years of data, while Jan-Apr are based on 3.
+
+## AI Statement
+I used AI tools (ChatGPT) to: help me understand and clarify lecture notes, to identify suitable R packages and functions for data processing and plotting, and to debug errors and improve my coding style. 
+Every AI-generated suggestion was checked by re-running the code and inspecting the intermediate outputs against the raw data.

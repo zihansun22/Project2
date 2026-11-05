@@ -1,4 +1,11 @@
 
+#' Process one year of EPA air quality data
+#'
+#' @param file_path Character. Path to a yearly AQ .csv file
+#' @param o3_unit Character. "ppm" (default) or "ppb"; units for O3
+#' @return A tibble with one row per day: date, co_ppm, pm25_ugm3, o3_ppm
+#'   (or o3_ppb if o3_unit = "ppb")
+
 process_air <- function(file_path, o3_unit = "ppm") {
   # Parameter validation
   o3_unit <- match.arg(o3_unit, c("ppm", "ppb"))
@@ -23,6 +30,12 @@ process_air <- function(file_path, o3_unit = "ppm") {
       o3_ppm     = mean(.data$`Daily Max 8-hour Ozone Concentration`, na.rm = TRUE),
       .groups = "drop"
     )
+  
+  daily <- daily |>
+    dplyr::mutate(dplyr::across(
+      c(co_ppm, pm25_ugm3, o3_ppm),
+      ~ ifelse(is.nan(.x), NA, .x)
+    ))
   
   # 4. set negative value to 0
   pollutant_cols <- c("co_ppm", "pm25_ugm3", "o3_ppm")
@@ -54,6 +67,7 @@ make_summary <- function(df, yr) {
       `O3 (ppm) min`      = min(o3_ppm,     na.rm = TRUE),
       `O3 (ppm) max`      = max(o3_ppm,     na.rm = TRUE)
     ) |>
-    mutate(across(everything(), ~ round(.x, 3)))
+    mutate(across(everything(), 
+                  ~ round(ifelse(is.infinite(.x), NA, .x), 3)))
 }
 
